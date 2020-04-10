@@ -51,11 +51,9 @@ function loadMap(searchtime) {
      * @return:
      */
     function renderPrimaryMap(result, flag) {
-      console.log('renderPrimaryMap -> result', result)
       let tmp = []
       if (flag) {
         result.forEach((item) => {
-          console.log('renderPrimaryMap -> item', item)
           tmp.push({
             id: item.id,
             name: item.name,
@@ -90,7 +88,6 @@ function loadMap(searchtime) {
 
 //地图单击事件
 chart.on('click', function (params) {
-  console.log('params', params)
   if (!(params.data.id || params.data.cityid)) {
     // 有省id，市id才有下一级
     console.error('该地图没有下一级地区了')
@@ -108,34 +105,57 @@ chart.on('click', function (params) {
       }
       Promise.all([ajaxRequest(getCityNumberUrl, searchtime, postData2)]).then(
         (result) => {
-          let curMonthResult = stringToJson(result[0])
-          if (curMonthResult.errcode == 1) {
-            getAreaNumber(params.name, curMonthResult.msg[0].cityid, searchtime)
+          try {
+            let curMonthResult = stringToJson(result[0])
+            if (curMonthResult.errcode == 1) {
+              getAreaNumber(params.name, curMonthResult.msg[0].cityid, searchtime)
+            }
+          } catch (error) {
+            getSecondMap(params)
           }
         },
         (error) => {
-          console.error('请求市级数据失败', e)
+          console.error('请求市级数据失败', error)
+          getSecondMap(params)
         }
       )
     } else {
       //如果点击的是34个省、市、自治区，绘制选中地区的二级地图
-      $.getJSON(provinceJson + provinces[params.name] + '.json', function (data) {
-        echarts.registerMap(params.name, data)
-        for (var i = 0; i < data.features.length; i++) {
-          // 读取地图的 name 用来组成 echart 需要的形式
-          mapJsonData.push({
-            name: data.features[i].properties.name,
-            value: Math.floor(Math.random() * 10000),
-          })
-        }
-        renderMap(params.name, mapJsonData)
-        if (params.data.id !== 'undifiend') {
-          getCityNumber(params.name, params.data.id, searchtime, data)
-        }
-      })
+      getSecondMap(params)
     }
   } else {
     //显示县级地图
+    getThridMap(params)
+  }
+
+  /**
+   * @description: 请求获取二级地图json文件
+   * @param {Object} params=地图参数
+   * @return:
+   */
+  function getSecondMap(params) {
+    $.getJSON(provinceJson + provinces[params.name] + '.json', function (data) {
+      echarts.registerMap(params.name, data)
+      for (var i = 0; i < data.features.length; i++) {
+        // 读取地图的 name 用来组成 echart 需要的形式
+        mapJsonData.push({
+          name: data.features[i].properties.name,
+          value: Math.floor(Math.random() * 10000),
+        })
+      }
+      renderMap(params.name, mapJsonData)
+      if (params.data.id !== 'undifiend') {
+        getCityNumber(params.name, params.data.id, searchtime, data)
+      }
+    })
+  }
+
+  /**
+   * @description: 请求获取三级地图json文件
+   * @param {Object} params=地图参数
+   * @return:
+   */
+  function getThridMap(params) {
     $.getJSON(cityJson + cityMap[params.name] + '.json', function (data) {
       echarts.registerMap(params.name, data)
       let mapJsonData = []
@@ -186,7 +206,7 @@ chart.on('contextmenu', (params) => {
 /**
  * 左上角返回按钮
  */
-$('#goBack').on('click', function () {
+$('#goBack').on('click', function (data) {
   goBack()
 })
 
