@@ -445,45 +445,46 @@ function getCityNumber(name, id, searchtime, data) {
           // 请求后台数据或者mock数据异常，用地图自身数据渲染
           renderSecondMap(data, true)
         })
-      /**
-       * @description: 渲染二级地图，城市
-       * @param {JSONString} resp=请求后台返回的地区关联数据
-       * @param {Boolean} flag=标识位，请求mock数据失败，用地图数据渲染的 true=地图数据渲染
-       * @return:
-       */
-      function renderSecondMap(resp, flag = false) {
-        let tmp = []
-        if (flag) {
-          resp.features.forEach((item) => {
-            tmp.push({
-              //需要加上cityid传递渲染，下一级地图渲染需要用到，点击的时候有判断，没有下级id直接return
-              cityid: item.id,
-              name: item.properties.name,
-              value: item.properties.childNum,
-            })
-          })
-        } else {
-          curMonthResult = stringToJson(resp[0])
-          if (curMonthResult.errcode == 1) {
-            citySaleData = []
-            for (let i = 0; i < curMonthResult.msg.length; i++) {
-              tmp.push({
-                cityid: curMonthResult.msg[i].cityid, //需要加上cityid传递渲染，下一级地图渲染需要用到
-                name: curMonthResult.msg[i].city,
-                value: curMonthResult.msg[i].num,
-              })
-            }
-          }
-        }
-        let maxData = getMaxDataAndSort(tmp)
-        renderMap(name, data, tmp, maxData.maxData)
-        getRegionPreMonthRatio(maxData.maxDataId, searchtime)
-      }
     },
     (error) => {
       console.error('请求城市数据失败', error)
+      renderSecondMap(data, true)
     }
   )
+  /**
+   * @description: 渲染二级地图，城市
+   * @param {JSONString} resp=请求后台返回的地区关联数据
+   * @param {Boolean} flag=标识位，请求mock数据失败，用地图数据渲染的 true=地图数据渲染
+   * @return:
+   */
+  function renderSecondMap(resp, flag = false) {
+    let tmp = []
+    if (flag) {
+      resp.features.forEach((item) => {
+        tmp.push({
+          //需要加上cityid传递渲染，下一级地图渲染需要用到，点击的时候有判断，没有下级id直接return
+          cityid: item.id,
+          name: item.properties.name,
+          value: item.properties.childNum,
+        })
+      })
+    } else {
+      curMonthResult = stringToJson(resp[0])
+      if (curMonthResult.errcode == 1) {
+        citySaleData = []
+        for (let i = 0; i < curMonthResult.msg.length; i++) {
+          tmp.push({
+            cityid: curMonthResult.msg[i].cityid, //需要加上cityid传递渲染，下一级地图渲染需要用到
+            name: curMonthResult.msg[i].city,
+            value: curMonthResult.msg[i].num,
+          })
+        }
+      }
+    }
+    let maxData = getMaxDataAndSort(tmp)
+    renderMap(name, data, tmp, maxData.maxData)
+    getRegionPreMonthRatio(maxData.maxDataId, searchtime)
+  }
 }
 
 /**
@@ -509,7 +510,8 @@ function getAreaNumber(cityName, cityId, searchtime, data) {
         })
     },
     (error) => {
-      console.error('获取县区数据失败', e)
+      console.error('获取县区数据失败', error)
+      renderThirdMap(data, true)
     }
   )
   /**
