@@ -1,3 +1,10 @@
+/*
+ * @Author: hotsuitor@qq.com
+ * @Date: 2019-08-16 10:29:47
+ * @LastEditors: hs
+ * @LastEditTime: 2020-04-10 09:46:45
+ * @Description: 爬虫爬取mock数据的代码，使用demo文件的代码不需要用到
+ */
 const http = require('http')
 const fs = require('fs')
 const path = require('path')

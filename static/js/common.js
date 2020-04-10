@@ -133,20 +133,6 @@ function numDescSort(a, b) {
   return a['value'] - b['value']
 }
 
-function getUrlRelativePath() {
-  var url = document.location.toString()
-  var arrUrl = url.split('//')
-
-  var start = arrUrl[1].indexOf('/')
-  var relUrl = arrUrl[1].substring(start) //stop省略，截取从start开始到结尾的所有字符
-
-  if (relUrl.indexOf('?') != -1) {
-    relUrl = relUrl.split('?')[0]
-  }
-  // console.log(relUrl)
-  return relUrl
-}
-getUrlRelativePath()
 var domain = document.domain
 // console.log(domain)
 var domain = window.location.href
@@ -157,7 +143,14 @@ tree.oncontextmenu = function() {
   return false
 }
 
-function ajaxRequest(url, searchtime, postData = '') {
+/**
+ * @description: 封装请求方法
+ * @param {String}  url
+ * @param {String}  searchtime='2018-05-01'
+ * @param {Object} postData=请求参数
+ * @return:
+ */
+function ajaxRequest(url, searchtime, postData = {}) {
   searchtime = searchtime || searchtime
   let data = {
     key: 'key',

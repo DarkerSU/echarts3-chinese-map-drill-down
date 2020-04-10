@@ -16,14 +16,14 @@ loadMap(searchtime)
 function loadMap(searchtime) {
   let mapName = '中国'
   //绘制全国地图
-  $.getJSON(chinaJson, function(data) {
+  $.getJSON(chinaJson, function (data) {
     chart.hideLoading()
     mapChina = data
-    let d = [] //临时数据
+    let mapJsonData = [] // 组装临时数据，用于地图上 label和value的渲染
     for (var i = 0; i < data.features.length; i++) {
-      d.push({
+      mapJsonData.push({
         id: data.features[i].id,
-        name: data.features[i].properties.name
+        name: data.features[i].properties.name,
       })
     }
     $('#select-date').val(searchtime)
@@ -35,95 +35,124 @@ function loadMap(searchtime) {
 
     /**获取省份数据*/
     Promise.all([ajaxRequest(getProvNumberUrl, searchtime)]).then(
-      result => {
+      (result) => {
+        renderPrimaryMap(result)
+      },
+      (error) => {
+        console.error('拿不到省份数据')
+        renderPrimaryMap(mapJsonData, true)
+      }
+    )
+
+    /**
+     * @description: 渲染二级地图，城市
+     * @param {Array}  result=后台返回的地区关联数据
+     * @param {Boolean} flag=不用后台数据渲染
+     * @return:
+     */
+    function renderPrimaryMap(result, flag) {
+      console.log('renderPrimaryMap -> result', result)
+      let tmp = []
+      if (flag) {
+        result.forEach((item) => {
+          console.log('renderPrimaryMap -> item', item)
+          tmp.push({
+            id: item.id,
+            name: item.name,
+            value: Math.floor(Math.random() * 100 + parseInt(item.id)),
+          })
+        })
+      } else {
         curMonthResult = stringToJson(result[0])
         if (curMonthResult.errcode == 1) {
           /**通过id关联地图上对应位置的数据 */
-          d.forEach(function(val) {
-            curMonthResult.msg.forEach(function(val2, index) {
+          mapJsonData.forEach(function (val) {
+            curMonthResult.msg.forEach(function (val2, index) {
               if (val.id === val2.provinceid) {
-                customerNum.push({
+                tmp.push({
                   id: val.id,
                   name: val.name,
-                  value: val2.num
+                  value: val2.num,
                 })
               }
             })
           })
         }
-        //获取最大值，并排序
-        let maxData = getMaxDataAndSort(customerNum)
-        //绘制地图，拿到数据后再渲染一次
-        renderMap(mapName, data, customerNum, maxData.maxData)
-        getRegionPreMonthRatio(maxData.maxDataId, searchtime)
-      },
-      error => {
-        console.log('拿不到省份数据')
       }
-    )
+      //获取最大值，并排序
+      let maxData = getMaxDataAndSort(tmp)
+      //绘制地图，拿到数据后再渲染一次
+      renderMap(mapName, data, tmp, maxData.maxData)
+      getRegionPreMonthRatio(maxData.maxDataId, searchtime)
+    }
   })
 }
 
 //地图单击事件
-chart.on('click', function(params) {
-  let allowDrillObj = { id: true, cityid: true }
+chart.on('click', function (params) {
+  console.log('params', params)
   if (!(params.data.id || params.data.cityid)) {
+    // 有省id，市id才有下一级
+    console.error('该地图没有下一级地区了')
     return
   }
   //隐藏右键返回菜单
   $('#contextMenu').hide()
-  let d = []
+  let mapJsonData = [] // 渲染地图name的数组
   if (params.name in provinces) {
     //二级直辖市数据渲染
     if (special.indexOf(params.name) >= 0) {
       let postData2 = {
         parentid: 'provinceid',
-        value: params.data.id
+        value: params.data.id,
       }
       Promise.all([ajaxRequest(getCityNumberUrl, searchtime, postData2)]).then(
-        result => {
+        (result) => {
           let curMonthResult = stringToJson(result[0])
           if (curMonthResult.errcode == 1) {
             getAreaNumber(params.name, curMonthResult.msg[0].cityid, searchtime)
           }
         },
-        error => {
-          console.log('请求市级数据失败', e)
+        (error) => {
+          console.error('请求市级数据失败', e)
         }
       )
+    } else {
+      //如果点击的是34个省、市、自治区，绘制选中地区的二级地图
+      $.getJSON(provinceJson + provinces[params.name] + '.json', function (data) {
+        echarts.registerMap(params.name, data)
+        for (var i = 0; i < data.features.length; i++) {
+          // 读取地图的 name 用来组成 echart 需要的形式
+          mapJsonData.push({
+            name: data.features[i].properties.name,
+            value: Math.floor(Math.random() * 10000),
+          })
+        }
+        renderMap(params.name, mapJsonData)
+        if (params.data.id !== 'undifiend') {
+          getCityNumber(params.name, params.data.id, searchtime, data)
+        }
+      })
     }
-    //如果点击的是34个省、市、自治区，绘制选中地区的二级地图
-    $.getJSON(provinceJson + provinces[params.name] + '.json', function(data) {
-      echarts.registerMap(params.name, data)
-      for (var i = 0; i < data.features.length; i++) {
-        d.push({
-          name: data.features[i].properties.name
-        })
-      }
-      renderMap(params.name, d)
-      if (params.data.id !== 'undifiend') {
-        getCityNumber(params.name, params.data.id, searchtime, data)
-      }
-    })
   } else {
     //显示县级地图
-    $.getJSON(cityJson + cityMap[params.name] + '.json', function(data) {
+    $.getJSON(cityJson + cityMap[params.name] + '.json', function (data) {
       echarts.registerMap(params.name, data)
-      let d = []
+      let mapJsonData = []
       for (var i = 0; i < data.features.length; i++) {
-        d.push({
-          name: data.features[i].properties.name
+        mapJsonData.push({
+          name: data.features[i].properties.name,
         })
       }
-      renderMap(params.name, d)
+      renderMap(params.name, mapJsonData)
       if (params.data.cityid) {
         let postData3 = {
           parentid: 'cityid',
-          value: params.data.cityid
+          value: params.data.cityid,
         }
         // console.log('204', res.msg[0].cityid, res.msg[0].city)
         //这里传递的城市名有问题“北京市”，渲染地图的名字是“北京”，所以地图名要用原来的名字渲染
-        getAreaNumber(params.name, params.data.cityid, searchtime)
+        getAreaNumber(params.name, params.data.cityid, searchtime, data)
       }
     })
   }
@@ -134,7 +163,7 @@ chart.on('click', function(params) {
   if (special.indexOf(params.seriesName) == -1) {
     n = 2
   }
-  //FiX:  2级下钻会有问题， 函数顶部加入下钻层级判断
+  // FiXED:  2级下钻会有问题， 函数顶部加入下钻层级判断
   if (mapStack.length < n) {
     //将上一级地图信息压入mapStack
     mapStack.push({
@@ -142,7 +171,7 @@ chart.on('click', function(params) {
       mapJson: curMap.mapJson,
       colorMax: curMap.colorMax,
       sortData: curMap.sortData,
-      titledata: curMap.titledata
+      titledata: curMap.titledata,
     })
     console.log('数据入栈', mapStack)
   }
@@ -151,13 +180,13 @@ chart.on('click', function(params) {
 /**
  * 右键直接返回上一级
  */
-chart.on('contextmenu', params => {
+chart.on('contextmenu', (params) => {
   goBack()
 })
 /**
  * 左上角返回按钮
  */
-$('#goBack').on('click', function() {
+$('#goBack').on('click', function () {
   goBack()
 })
 
@@ -168,7 +197,7 @@ function goBack() {
   //获取上一级地图信息
   let map = mapStack.pop()
   if (!map) {
-    console.log('没有入栈数据')
+    console.log('没有入栈数据了')
     return
   }
   echarts.registerMap(map.mapName, map.mapJson)
@@ -179,32 +208,32 @@ function goBack() {
 
 /**
  *
- * @param {地图标题} map
+ * @param {地图标题} mapTitle
  * @param {客户数} customerNum
  * @param {地图json数据} mapJson
  * @param {最大颜色值} colorMax
  */
-function renderMap(map, mapJson, customerNum, colorMax = 1500) {
+function renderMap(mapTitle, mapJson, customerNum, colorMax = 1500) {
   //地图配置参数，参数按顺序渲染
   option = {
     backgroundColor: '#F7EED6', //地图画布背景颜色  "#F7EED6"米黄色  "#efefef"灰色
     title: {
       //地图文本
-      text: map,
+      text: mapTitle,
       subtext: '右键返回上一级',
       left: 'center',
       textStyle: {
         color: '#000',
         fontSize: 26,
         fontWeight: 'normal',
-        fontFamily: 'Microsoft YaHei'
+        fontFamily: 'Microsoft YaHei',
       },
       subtextStyle: {
         color: 'rgb(55, 75, 113)',
         fontSize: 18,
         fontWeight: 'normal',
-        fontFamily: 'Microsoft YaHei'
-      }
+        fontFamily: 'Microsoft YaHei',
+      },
     },
     // 鼠标 hover 折线图
     // tooltip: {
@@ -237,7 +266,7 @@ function renderMap(map, mapJson, customerNum, colorMax = 1500) {
     tooltip: {
       //提示框信息
       trigger: 'item',
-      formatter: '{b}\n{c}人'
+      formatter: '{b}\n{c}人',
     },
     toolbox: {
       //工具box
@@ -249,13 +278,13 @@ function renderMap(map, mapJson, customerNum, colorMax = 1500) {
       feature: {
         dataView: { readOnly: false },
         restore: {},
-        saveAsImage: {}
+        saveAsImage: {},
       },
       iconStyle: {
         normal: {
-          color: '#fff'
-        }
-      }
+          color: '#fff',
+        },
+      },
     },
     //左下角的颜色条
     visualMap: {
@@ -268,13 +297,13 @@ function renderMap(map, mapJson, customerNum, colorMax = 1500) {
       calculable: true,
       // seriesIndex: [1],    //会使颜色失效
       color: ['#c05050', '#e5cf0d', '#5ab1ef'], //色阶范围
-      dimension: 0
+      dimension: 0,
     },
     grid: {
       left: 130,
       top: 100,
       botton: 40,
-      width: '20%'
+      width: '20%',
     },
     xAxis: [
       {
@@ -282,18 +311,18 @@ function renderMap(map, mapJson, customerNum, colorMax = 1500) {
         type: 'value',
         boundaryGap: false,
         splitLine: {
-          show: false
+          show: false,
         },
         axisLine: {
-          show: false
+          show: false,
         },
         axisTick: {
-          show: false
+          show: false,
         },
         axisLabel: {
-          color: '#ff461f'
-        }
-      }
+          color: '#ff461f',
+        },
+      },
     ],
     yAxis: [
       {
@@ -301,22 +330,22 @@ function renderMap(map, mapJson, customerNum, colorMax = 1500) {
         data: titledata,
         triggerEvent: true,
         axisTick: {
-          alignWithLabel: true
+          alignWithLabel: true,
         },
         axisLine: {
           show: true,
           lineStyle: {
             show: true,
-            color: '#2ec7c9'
-          }
-        }
-      }
+            color: '#2ec7c9',
+          },
+        },
+      },
     ],
     series: [
       {
-        name: map, //上面的下钻用到seriesName绑定下一级，换name绑定
+        name: mapTitle, //上面的下钻用到seriesName绑定下一级，换name绑定
         type: 'map',
-        map: map,
+        map: mapTitle,
         roam: false,
         height: '100%',
         zoom: 0.75,
@@ -328,66 +357,66 @@ function renderMap(map, mapJson, customerNum, colorMax = 1500) {
             position: 'inside', //文本标签显示的位置
             textStyle: {
               color: '#fff', //文本颜色
-              fontSize: 14
+              fontSize: 14,
             },
-            formatter: '{b}\n{c}' //文本上显示的值  data:[{name: "地名", value: 数据}],  {b}表示label信息,{c}代表value
+            formatter: '{b}\n{c}', //文本上显示的值  data:[{name: "地名", value: 数据}],  {b}表示label信息,{c}代表value
           },
           emphasis: {
             show: true,
             position: 'inside',
             textStyle: {
               color: '#fff',
-              fontSize: 13
-            }
-          }
+              fontSize: 13,
+            },
+          },
         },
         itemStyle: {
           normal: {
             areaColor: '#5ab1ef', //地图块颜色#DCE2F1  浅蓝#2B91B7
-            borderColor: '#EBEBE4' //#EBEBE4灰色
+            borderColor: '#EBEBE4', //#EBEBE4灰色
           },
           emphasis: {
-            areaColor: 'rgb(254,153,78)' //s鼠标放上去，地图块高亮显示的颜色
-          }
+            areaColor: 'rgb(254,153,78)', //s鼠标放上去，地图块高亮显示的颜色
+          },
         },
-        data: customerNum
+        data: customerNum,
       },
       {
-        name: map,
+        name: mapTitle,
         type: 'bar',
         z: 4,
         label: {
           normal: {
-            show: true
+            show: true,
           },
           empahsis: {
-            show: true
-          }
+            show: true,
+          },
         },
         itemStyle: {
           emphasis: {
-            color: 'rgb(254,153,78)'
-          }
+            color: 'rgb(254,153,78)',
+          },
         },
-        data: customerNum
-      }
+        data: customerNum,
+      },
     ],
     // 初始动画的时长，支持回调函数，可以通过每个数据返回不同的 delay 时间实现更戏剧的初始动画效果：
     animationDuration: 1000,
     animationEasing: 'cubicOut',
     // 数据更新动画的时长。
-    animationDurationUpdate: 1000
+    animationDurationUpdate: 1000,
   }
 
   //渲染地图
   chart.setOption(option)
   //保存当前状态数据，用于入栈出栈
   curMap = {
-    mapName: map,
+    mapName: mapTitle,
     mapJson: mapJson,
     colorMax: colorMax,
     sortData: sortData,
-    titledata: titledata
+    titledata: titledata,
   }
 }
 
@@ -404,31 +433,55 @@ function getCityNumber(name, id, searchtime, data) {
   }
   let postData2 = {
     parentid: 'provinceid',
-    value: id
+    value: id,
   }
   Promise.all([ajaxRequest(getCityNumberUrl, searchtime, postData2)]).then(
-    result => {
-      Promise.all([ajaxRequest(getCityNumberUrl + id + '.json')]).then(resp => {
-        curMonthResult = stringToJson(resp[0])
+    (result) => {
+      Promise.all([ajaxRequest(getCityNumberUrl + id + '.json')])
+        .then((resp) => {
+          renderSecondMap(resp)
+        })
+        .catch(() => {
+          // 请求后台数据或者mock数据异常，用地图自身数据渲染
+          renderSecondMap(data, true)
+        })
+      /**
+       * @description: 渲染二级地图，城市
+       * @param {JSONString} resp=请求后台返回的地区关联数据
+       * @param {Boolean} flag=标识位，请求mock数据失败，用地图数据渲染的 true=地图数据渲染
+       * @return:
+       */
+      function renderSecondMap(resp, flag = false) {
         let tmp = []
-        if (curMonthResult.errcode == 1) {
-          citySaleData = []
-          for (let i = 0; i < curMonthResult.msg.length; i++) {
+        if (flag) {
+          resp.features.forEach((item) => {
             tmp.push({
-              cityid: curMonthResult.msg[i].cityid, //需要加上cityid传递渲染，下一级地图渲染需要用到
-              name: curMonthResult.msg[i].city,
-              value: curMonthResult.msg[i].num
+              //需要加上cityid传递渲染，下一级地图渲染需要用到，点击的时候有判断，没有下级id直接return
+              cityid: item.id,
+              name: item.properties.name,
+              value: item.properties.childNum,
             })
+          })
+        } else {
+          curMonthResult = stringToJson(resp[0])
+          if (curMonthResult.errcode == 1) {
+            citySaleData = []
+            for (let i = 0; i < curMonthResult.msg.length; i++) {
+              tmp.push({
+                cityid: curMonthResult.msg[i].cityid, //需要加上cityid传递渲染，下一级地图渲染需要用到
+                name: curMonthResult.msg[i].city,
+                value: curMonthResult.msg[i].num,
+              })
+            }
           }
-
-          let maxData = getMaxDataAndSort(tmp)
-          renderMap(name, data, tmp, maxData.maxData)
-          getRegionPreMonthRatio(maxData.maxDataId, searchtime)
         }
-      })
+        let maxData = getMaxDataAndSort(tmp)
+        renderMap(name, data, tmp, maxData.maxData)
+        getRegionPreMonthRatio(maxData.maxDataId, searchtime)
+      }
     },
-    error => {
-      console.log('请求市级数据失败', e)
+    (error) => {
+      console.error('请求城市数据失败', error)
     }
   )
 }
@@ -443,39 +496,60 @@ function getCityNumber(name, id, searchtime, data) {
 function getAreaNumber(cityName, cityId, searchtime, data) {
   let postData3 = {
     parentid: 'cityid',
-    value: cityId
+    value: cityId,
   }
   Promise.all([ajaxRequest(getAreaNumberUrl, searchtime, postData3)]).then(
-    result => {
-      Promise.all([ajaxRequest(getAreaNumberUrl + cityId + '.json')]).then(
-        resp => {
-          curMonthResult = stringToJson(resp[0])
-          let tmp = []
-          if (curMonthResult.errcode == 1) {
-            areaSaleData = []
-            for (let i = 0; i < curMonthResult.msg.length; i++) {
-              // 返回是一个数组，array({id: 1954, areaid: "440301", area: "深圳市", num: 0})
-              tmp.push({
-                areaid: curMonthResult.msg[i].areaid,
-                name: curMonthResult.msg[i].area,
-                value: curMonthResult.msg[i].num
-              })
-            }
-
-            let maxData = getMaxDataAndSort(tmp)
-            renderMap(cityName, data, tmp, maxData.maxData)
-            getRegionPreMonthRatio(maxData.maxDataId, searchtime)
-          }
-        }
-      )
+    (result) => {
+      Promise.all([ajaxRequest(getAreaNumberUrl + cityId + '.json')])
+        .then((resp) => {
+          renderThirdMap(resp)
+        })
+        .catch(() => {
+          renderThirdMap(data, true)
+        })
     },
-    error => {
-      console.log('获取县区数据失败', e)
+    (error) => {
+      console.error('获取县区数据失败', e)
     }
   )
+  /**
+   * @description: 渲染三级级地图，县区
+   * @param {JSONString} resp=请求后台返回的地区关联数据
+   * @param {Boolean} flag=标识位，请求mock数据失败，用地图数据渲染的 true=地图数据渲染
+   * @return:
+   */
+  function renderThirdMap(resp, flag = false) {
+    console.log('renderThirdMap -> resp', resp)
+    let tmp = []
+    if (flag) {
+      resp.features.forEach((item) => {
+        tmp.push({
+          areaid: item.id,
+          name: item.properties.name,
+          value: Math.floor(Math.random() * 10 + 1),
+        })
+      })
+    } else {
+      curMonthResult = stringToJson(resp[0])
+      if (curMonthResult.errcode == 1) {
+        areaSaleData = []
+        for (let i = 0; i < curMonthResult.msg.length; i++) {
+          // 返回是一个数组，array({id: 1954, areaid: "440301", area: "深圳市", num: 0})
+          tmp.push({
+            areaid: curMonthResult.msg[i].areaid,
+            name: curMonthResult.msg[i].area,
+            value: curMonthResult.msg[i].num,
+          })
+        }
+      }
+    }
+    let maxData = getMaxDataAndSort(tmp)
+    renderMap(cityName, data, tmp, maxData.maxData)
+    getRegionPreMonthRatio(maxData.maxDataId, searchtime)
+  }
 }
 
-let areaList = null
+let areaList = []
 let vm = new Vue({
   el: '#trend-line',
   data: {
@@ -484,13 +558,14 @@ let vm = new Vue({
     cpModalTitle: [],
     searchtime: searchtime,
     time: 0,
-    otime: 0
+    otime: 0,
   },
   methods: {
     setAreaList(data) {
-      let $_self = this
-      $_self._data.areaList = data //这里有个坑，_data
-    }
+      // let $_self = this
+      // $_self._data.areaList = data //这里有个坑，_data
+      this.areaList = data // vue是这样写的，内部有代理
+    },
   },
   watch: {
     modalTitle(val, oldVal) {
@@ -505,8 +580,8 @@ let vm = new Vue({
       if ($_self._data.time > $_self._data.otime) {
         getRegionPreMonthRatio(val, $_self._data.searchtime)
       }
-    }
-  }
+    },
+  },
 })
 /**
  *
@@ -523,9 +598,7 @@ function getMaxDataAndSort(originData) {
   let maxData = sortData.slice(-1)[0]['value']
   let maxDataId = sortData.slice(-1)[0]['id']
   if (!maxDataId) {
-    maxDataId = sortData.slice(-1)[0]['cityid']
-      ? sortData.slice(-1)[0]['cityid']
-      : sortData.slice(-1)[0]['areaid']
+    maxDataId = sortData.slice(-1)[0]['cityid'] ? sortData.slice(-1)[0]['cityid'] : sortData.slice(-1)[0]['areaid']
   }
   for (let i = 0; i < sortData.length; i++) {
     titledata.push(sortData[i].name)
@@ -534,13 +607,13 @@ function getMaxDataAndSort(originData) {
   vm.setAreaList(areaList)
   return {
     maxDataId,
-    maxData
+    maxData,
   }
 }
 /**
  * 按月份筛选数据
  */
-$('#select-date').change(function() {
+$('#select-date').change(function () {
   customerNum = []
   let selMonth = $(this).val()
   loadMap(selMonth)
@@ -555,52 +628,46 @@ function getRegionPreMonthRatio(region, year) {
   let tmpMonth = []
   let postRegion = {
     region: region,
-    year: year
+    year: year,
   }
   Promise.all([ajaxRequest(getRegionPreMonthCusUrl, '', postRegion)])
     .then(
-      res => {
+      (res) => {
         let [allMonthResult] = res
         if (allMonthResult.errcode === 1) {
           for (let i = 0; i < allMonthResult.data.region.length; i++) {
             tmp.push(Math.round(allMonthResult.data.region[i].customer_num))
-            tmp2.push(
-              Math.round(allMonthResult.data.region[i].averge_customer_num)
-            )
+            tmp2.push(Math.round(allMonthResult.data.region[i].averge_customer_num))
             tmpMonth.push(allMonthResult.data.region[i].time)
           }
         }
         let option = {
           tooltip: {
-            trigger: 'axis'
+            trigger: 'axis',
           },
           dataset: {
-            source: [tmpMonth, tmp, tmp2]
-          }
+            source: [tmpMonth, tmp, tmp2],
+          },
         }
         modalChart.setOption(option)
         let tmpSession = {
           yearMonth: tmpMonth,
           region: tmp,
-          level_region: tmp2
+          level_region: tmp2,
         }
         sessionStorage.setItem(region, JSON.stringify(tmpSession))
-        return [
-          allMonthResult.data.region_name,
-          allMonthResult.data.level_name,
-          option
-        ]
+        return [allMonthResult.data.region_name, allMonthResult.data.level_name, option]
       },
-      error => {}
+      (error) => {}
     )
-    .then(res => {
+    .then((res) => {
       if (res) {
         loadLineTrend(res[0], res[1] + '平均')
         modalChart.setOption(res[3])
       } else {
         vm._data.modalTitle = '没有数据'
         modalChart.clear()
-        console.log('返回数据有问题，无法完成数据渲染', res)
+        console.log('返回数据有问题，无法完成折线图渲染')
       }
     })
 }
@@ -616,14 +683,14 @@ function loadLineTrend(region, upRegion) {
   let option = {
     title: {
       text: region + '地区月份数据',
-      subtext: ''
+      subtext: '',
     },
     tooltip: {
-      trigger: 'axis'
+      trigger: 'axis',
     },
     dataset: {},
     legend: {
-      data: [region, upRegion]
+      data: [region, upRegion],
     },
     // toolbox: {
     //   show: true,
@@ -638,13 +705,13 @@ function loadLineTrend(region, upRegion) {
     // },
     xAxis: {
       type: 'category',
-      boundaryGap: ['10%', '10%'] //X轴两边留白策略
+      boundaryGap: ['10%', '10%'], //X轴两边留白策略
     },
     yAxis: {
       type: 'value',
       axisLabel: {
-        formatter: '{value}'
-      }
+        formatter: '{value}',
+      },
     },
     series: [
       {
@@ -653,19 +720,19 @@ function loadLineTrend(region, upRegion) {
         smooth: true,
         label: {
           normal: {
-            show: true
-          }
+            show: true,
+          },
         },
         seriesLayoutBy: 'row',
         markPoint: {
           data: [
             // { type: "max", name: "最大值" },
             // { type: "min", name: "最小值" }
-          ]
+          ],
         },
         markLine: {
-          data: [{ type: 'average', name: '平均值' }]
-        }
+          data: [{ type: 'average', name: '平均值' }],
+        },
       },
       {
         name: upRegion,
@@ -673,18 +740,18 @@ function loadLineTrend(region, upRegion) {
         smooth: true,
         label: {
           normal: {
-            show: true
-          }
+            show: true,
+          },
         },
         seriesLayoutBy: 'row',
         markPoint: {
-          data: [{ name: '最低', value: 'mix' }]
+          data: [{ name: '最低', value: 'mix' }],
         },
         markLine: {
-          data: [{ type: 'average', name: '平均值' }]
-        }
-      }
-    ]
+          data: [{ type: 'average', name: '平均值' }],
+        },
+      },
+    ],
   }
   // 使用刚指定的配置项和数据显示图表。
   modalChart.setOption(option)
