@@ -519,7 +519,6 @@ function getAreaNumber(cityName, cityId, searchtime, data) {
    * @return:
    */
   function renderThirdMap(resp, flag = false) {
-    console.log('renderThirdMap -> resp', resp)
     let tmp = []
     if (flag) {
       resp.features.forEach((item) => {
