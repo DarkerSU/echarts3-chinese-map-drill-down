@@ -592,14 +592,14 @@ let vm = new Vue({
     modalTitle(val, oldVal) {
       let $_self = this
       if (val.length > oldVal) {
-        $_self._data.time++
-        $_self._data.cpModalTitle.push(val)
+        this.time++
+        this.cpModalTitle.push(val)
       } else {
         // $_self._data.time--;
       }
       //TODO 取消不请求数据
-      if ($_self._data.time > $_self._data.otime) {
-        getRegionPreMonthRatio(val, $_self._data.searchtime)
+      if (this.time > this.otime) {
+        getRegionPreMonthRatio(val, this.searchtime)
       }
     },
   },
